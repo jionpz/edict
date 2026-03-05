@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  edict-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7891:7891"
+    environment:
+      - DEMO_MODE=false
+    restart: unless-stopped
