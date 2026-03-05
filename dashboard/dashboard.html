@@ -889,7 +889,11 @@ function restoreGlobalScanState(){
   globalScanCheckedAt = String(raw.checkedAt || '');
   globalScanCount = Number(raw.count || globalScanActions.length || 0);
   if(st){
-    const at = globalScanCheckedAt.replace('T',' ').substring(11,19);
+    let at = '';
+    try{
+      const d = new Date(globalScanCheckedAt);
+      at = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'});
+    }catch(_){ at = ''; }
     const count = globalScanCount;
     st.textContent = count || at ? `最近巡检: ${count} 个动作${at ? ' · ' + at : ''}` : '未巡检';
   }
@@ -1105,7 +1109,7 @@ function renderAgentsStatus(data){
         <span><span class="as-dot idle" style="position:static;width:8px;height:8px"></span> ${idle} 待命</span>
         ${offline?`<span><span class="as-dot offline" style="position:static;width:8px;height:8px"></span> ${offline} 离线</span>`:''}
         ${unconf?`<span><span class="as-dot unconfigured" style="position:static;width:8px;height:8px"></span> ${unconf} 未配置</span>`:''}
-        <span style="margin-left:auto;font-size:10px;color:var(--muted)">检测于 ${(data.checkedAt||'').substring(11,19)}</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--muted)">检测于 ${(()=>{try{const d=new Date(data.checkedAt||'');return isNaN(d.getTime())?'':d.toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'});}catch(_){return ''}})()}</span>
       </div>
     </div>`;
 }
@@ -1704,15 +1708,18 @@ function renderLiveActivity(data){
 }
 
 function fmtActivityTime(ts){
-  if(!ts)return '';
-  if(typeof ts==='number'){
-    const d=new Date(ts);
-    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  if(!ts) return '';
+  // Prefer rendering in Beijing time to avoid 8h skew when strings are UTC (Z)
+  try{
+    const d = (typeof ts==='number')
+      ? new Date(ts)
+      : new Date(String(ts).includes('T') ? String(ts) : String(ts).replace(' ','T') + 'Z');
+    if(isNaN(d.getTime())) throw new Error('bad date');
+    return d.toLocaleTimeString('zh-CN', { hour12:false, timeZone:'Asia/Shanghai' });
+  }catch(_){
+    if(typeof ts==='string' && ts.length>=19) return ts.substring(11,19);
+    return String(ts).substring(0,8);
   }
-  if(typeof ts==='string'&&ts.length>=19){
-    return ts.substring(11,19);
-  }
-  return String(ts).substring(0,8);
 }
 
 /* ══ MODEL CONFIG ══ */
@@ -2101,7 +2108,7 @@ function openSessionDetail(jsonStr){
         const kLabel = kind==='assistant'?'回复':kind==='tool'?'工具':kind==='user'?'用户':'事件';
         let txt = (a.text||'').replace(/\[\[.*?\]\]/g,'').replace(/\*\*/g,'').trim();
         if(txt.length>200) txt=txt.substring(0,200)+'…';
-        const time = (a.at||'').substring(11,19);
+        const time = fmtActivityTime(a.at||'');
         return `<div style="padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;line-height:1.5">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
             <span>${kIcon}</span>
@@ -2628,7 +2635,7 @@ async function runGlobalSchedulerScan(){
     const r = await postJ(API + '/scheduler-scan', {thresholdSec: 180});
     if(r.ok){
       const count = r.count || 0;
-      const at = (r.checkedAt || '').replace('T',' ').substring(11,19);
+      const at = (()=>{try{const d=new Date(r.checkedAt||'');return isNaN(d.getTime())?'':d.toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'});}catch(_){return ''}})();
       globalScanActions = Array.isArray(r.actions) ? r.actions : [];
       globalScanCheckedAt = String(r.checkedAt || '');
       globalScanCount = Number(count || 0);
