@@ -637,3 +637,9 @@ curl http://localhost:7891/api/remote-skills-list
   <strong>⚔️ 以古制御新技，以智慧驾驭 AI</strong><br>
   <sub>Governing AI with the wisdom of ancient empires</sub>
 </p>
+
+## AI代码助手培训包
+- training/ai-coding-assistants/00-速查与练习.md
+- training/ai-coding-assistants/01-练习题-以Edict为例.md
+- training/ai-coding-assistants/02-WSL坑与登录指南.md
+- training/ai-coding-assistants/03-Agent-Team-概念与协作范式.md
