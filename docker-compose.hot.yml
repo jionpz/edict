@@ -6,17 +6,20 @@ services:
       context: .
       dockerfile: docker/Dockerfile.hot
     working_dir: /app
+    network_mode: host
     user: "1001:1001"
     environment:
       - HOME=/home/jionpz
+      - PATH=/home/jionpz/.nvm/versions/node/v24.13.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - OPENCLAW_GATEWAY_BASE=http://127.0.0.1:18789
+      - EDICT_SHOW_OC_TASKS=0
     volumes:
       - ./:/app
-      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:ro
+      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:rw
+      - /home/jionpz/.nvm:/home/jionpz/.nvm:ro
     command: >
       watchfiles --filter python
       "python3 dashboard/server.py --host 0.0.0.0 --port 7891"
-    ports:
-      - "7891:7891"
     restart: unless-stopped
 
   edict-loop:
@@ -24,13 +27,16 @@ services:
       context: .
       dockerfile: docker/Dockerfile.hot
     working_dir: /app
+    network_mode: host
     user: "1001:1001"
     environment:
       - HOME=/home/jionpz
-      - DASHBOARD_BASE=http://edict-dashboard:7891
+      - DASHBOARD_BASE=http://127.0.0.1:7891
+      - EDICT_SHOW_OC_TASKS=0
     volumes:
       - ./:/app
-      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:ro
+      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:rw
+      - /home/jionpz/.nvm:/home/jionpz/.nvm:ro
     command: bash scripts/run_loop.sh 15 120
     depends_on:
       - edict-dashboard

@@ -669,24 +669,23 @@ _AGENT_DEPTS = [
 ]
 
 
-def _check_gateway_alive():
-    """检测 Gateway 进程是否在运行。"""
-    try:
-        result = subprocess.run(['pgrep', '-f', 'openclaw-gateway'],
-                                capture_output=True, text=True, timeout=5)
-        return result.returncode == 0
-    except Exception:
-        return False
+def _gateway_base():
+    return os.getenv('OPENCLAW_GATEWAY_BASE', 'http://127.0.0.1:18789').rstrip('/')
 
 
 def _check_gateway_probe():
     """通过 HTTP probe 检测 Gateway 是否响应。"""
     try:
         from urllib.request import urlopen
-        resp = urlopen('http://127.0.0.1:18789/', timeout=3)
+        resp = urlopen(f'{_gateway_base()}/', timeout=3)
         return resp.status == 200
     except Exception:
         return False
+
+
+def _check_gateway_alive():
+    """容器环境里无法可靠 pgrep 宿主机进程；以 HTTP probe 为准。"""
+    return _check_gateway_probe()
 
 
 def _get_agent_session_status(agent_id):
@@ -825,7 +824,9 @@ def wake_agent(agent_id, message=''):
     if not _check_agent_workspace(agent_id):
         return {'ok': False, 'error': f'{agent_id} 工作空间不存在，请先配置'}
     if not _check_gateway_alive():
-        return {'ok': False, 'error': 'Gateway 未启动，请先运行 openclaw gateway start'}
+        return {'ok': False, 'error': f'Gateway 不可达: {_gateway_base()}'}
+    if not shutil.which('openclaw'):
+        return {'ok': False, 'error': '容器内未安装 openclaw CLI，自动唤醒不可用（同步与看板不受影响）'}
 
     # agent_id 直接作为 runtime_id（openclaw agents list 中的注册名）
     runtime_id = agent_id

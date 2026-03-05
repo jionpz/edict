@@ -5,6 +5,7 @@ import time
 import datetime
 import traceback
 import logging
+import os
 from file_lock import atomic_json_write, atomic_json_read
 
 log = logging.getLogger('sync_runtime')
@@ -268,7 +269,9 @@ def main():
         tasks = deduped
 
         # ── 过滤掉非 JJC 且非活跃的系统会话，防止看板噪音 ──
-        # 规则: 仅保留 24小时内更新的活跃会话，且排除 cron/subagent 等纯后台任务
+        # 默认仅展示 JJC-*（皇上旨意）；如需展示活跃 OC 会话，可设置 EDICT_SHOW_OC_TASKS=1
+        show_oc_tasks = os.getenv('EDICT_SHOW_OC_TASKS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
         filtered_tasks = []
         one_day_ago = now_ms - 24 * 3600 * 1000
         for t in tasks:
@@ -276,15 +279,18 @@ def main():
             if str(t['id']).startswith('JJC'):
                 filtered_tasks.append(t)
                 continue
-            
+
+            if not show_oc_tasks:
+                continue
+
             # OC 任务过滤
             updated = t.get('sourceMeta', {}).get('updatedAt', 0)
             title = t.get('title', '')
-            
+
             # 1. 排除太旧的 (超过24小时)
             if updated < one_day_ago:
                 continue
-            
+
             # 2. 排除纯后台 cron / subagent 任务，除非它们正在报错
             if '定时任务' in title or '子任务' in title:
                 # 只有当它 block 或者 error 时才显示，否则视为噪音
@@ -292,16 +298,13 @@ def main():
                     continue
 
             # 3. 排除非活跃的 OC 会话 (超过 5 分钟无响应)，避免污染看板
-            # 除非它是 Blocked (报错)，或者是今天新建的
             state = t.get('state')
             # state_from_session: < 2min = Doing, < 60min = Review, else = Next
             if state not in ('Doing', 'Blocked'):
-                # 如果不是正在进行或报错，就隐藏掉
-                # 特例: 如果是 mission control (mc-) 的心跳，可能也没必要显示，除非 Doing
                 continue
 
             filtered_tasks.append(t)
-        
+
         tasks = filtered_tasks
         
         # ── 保留已有的 JJC-* 旨意任务（不覆盖皇上下旨记录）──
