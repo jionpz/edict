@@ -36,19 +36,24 @@ npm run dev
 # http://localhost:5173
 ```
 
-## 3. 容器模式（适合对外演示/统一环境）
-当前仓库的 Dockerfile 是“构建前端 + Python server + 注入 demo_data”的方式，更偏演示镜像。
+## 3. 容器模式（推荐：本地改代码立即生效）
+如果你希望“容器跑起来，但本地改代码马上生效”，用 `docker-compose.hot.yml`。
 
-### 3.1 构建并运行
+### 3.1 启动（看板 + 刷新循环 + 前端热更新）
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.hot.yml up --build
 ```
 
-访问： http://127.0.0.1:7891
+- 看板：http://127.0.0.1:7891
+- 前端 dev：http://127.0.0.1:5173
 
-### 3.2 说明（热更新）
-- 目前 `docker-compose.dev.yml` 没做代码卷挂载，因此容器内不会自动热更新。
-- 若你需要“容器里热更新”，下一步可以把 compose 改成挂载本地目录到容器，并用 `python -u dashboard/server.py` 直接跑源码；前端则用 `npm run dev` 走宿主机或另起 node 容器。
+### 3.2 热更新行为
+- `dashboard/server.py`：容器内用 `watchfiles` 自动重启，改完即生效。
+- `edict/frontend`：Vite dev server 热更新，改完即生效。
+- 数据刷新：`edict-loop` 容器持续运行 `scripts/run_loop.sh`。
+
+### 3.3 Docker daemon 说明
+- WSL 下需要 Docker Desktop（开启 WSL Integration）或本机 docker daemon 正常运行，否则 `docker compose` 会提示无法连接。
 
 ## 4. 常见问题
 - 端口被占用：`ss -lntp | grep :7891`

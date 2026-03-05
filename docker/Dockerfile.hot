@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends bash curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Hot reload for python
+RUN pip install --no-cache-dir watchfiles==0.22.0
+
+WORKDIR /app
+
+EXPOSE 7891

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  edict-dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.hot
+    working_dir: /app
+    user: "1001:1001"
+    environment:
+      - HOME=/home/jionpz
+    volumes:
+      - ./:/app
+      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:ro
+    command: >
+      watchfiles --filter python
+      "python3 dashboard/server.py --host 0.0.0.0 --port 7891"
+    ports:
+      - "7891:7891"
+    restart: unless-stopped
+
+  edict-loop:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.hot
+    working_dir: /app
+    user: "1001:1001"
+    environment:
+      - HOME=/home/jionpz
+      - DASHBOARD_BASE=http://edict-dashboard:7891
+    volumes:
+      - ./:/app
+      - /home/jionpz/.openclaw:/home/jionpz/.openclaw:ro
+    command: bash scripts/run_loop.sh 15 120
+    depends_on:
+      - edict-dashboard
+    restart: unless-stopped
+
+  edict-frontend:
+    image: node:20-alpine
+    working_dir: /app/edict/frontend
+    volumes:
+      - ./:/app
+      - node_modules:/app/edict/frontend/node_modules
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+volumes:
+  node_modules:
