@@ -58,7 +58,7 @@ def _load_tasks() -> list[dict[str, Any]]:
 
 
 def _has_evidence(task: dict[str, Any]) -> bool:
-    # Flexible: accept common keys.
+    """Heuristic: a Done task should reference an evidence/output path."""
     for key in ("evidence", "evidencePath", "output", "outputPath"):
         value = task.get(key)
         if isinstance(value, str) and value.strip():
@@ -66,21 +66,33 @@ def _has_evidence(task: dict[str, Any]) -> bool:
     return False
 
 
+def _is_blocked(task: dict[str, Any]) -> bool:
+    """Treat tasks with explicit block reason as 'blocked' (exclude from stall alerts)."""
+    block = task.get("block")
+    if not isinstance(block, str):
+        return False
+    block = block.strip()
+    return bool(block) and block not in ("无", "-", "none", "None")
+
+
+def _hours_since_updated(task: dict[str, Any], now: datetime) -> float | None:
+    dt = _parse_iso(str(task.get("updatedAt")) if task.get("updatedAt") else None)
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (now - dt).total_seconds() / 3600
+
+
 def compute_counts(tasks: list[dict[str, Any]], now: datetime) -> HealthCounts:
     not_done_tasks = [t for t in tasks if str(t.get("state", "")) != "Done"]
-
-    def hours_since(task: dict[str, Any]) -> float | None:
-        dt = _parse_iso(str(task.get("updatedAt")) if task.get("updatedAt") else None)
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return (now - dt).total_seconds() / 3600
 
     stalled_6h = 0
     stalled_24h = 0
     for t in not_done_tasks:
-        h = hours_since(t)
+        if _is_blocked(t):
+            continue
+        h = _hours_since_updated(t, now)
         if h is None:
             continue
         if h >= 6:
@@ -107,6 +119,22 @@ def main() -> int:
     tasks = _load_tasks()
     counts = compute_counts(tasks, now)
 
+    # Extra signals for "self-evolution": dispatch failures and blocked backlog.
+    blocked = []
+    dispatch_errors = []
+    for t in tasks:
+        if _is_blocked(t) and str(t.get("state", "")) != "Done":
+            blocked.append({"id": t.get("id"), "title": t.get("title"), "block": t.get("block"), "state": t.get("state")})
+        sched = t.get("_scheduler") if isinstance(t.get("_scheduler"), dict) else {}
+        if sched.get("lastDispatchStatus") == "error" or sched.get("lastDispatchError"):
+            dispatch_errors.append({
+                "id": t.get("id"),
+                "title": t.get("title"),
+                "state": t.get("state"),
+                "error": sched.get("lastDispatchError"),
+                "trigger": sched.get("lastDispatchTrigger"),
+            })
+
     report = {
         "generatedAt": now.isoformat().replace("+00:00", "Z"),
         "counts": {
@@ -115,10 +143,17 @@ def main() -> int:
             "stalled6h": counts.stalled_6h,
             "stalled24h": counts.stalled_24h,
             "doneMissingEvidence": counts.done_missing_evidence,
+            "blockedNotDone": len(blocked),
+            "dispatchErrors": len(dispatch_errors),
+        },
+        "top": {
+            "blocked": blocked[:10],
+            "dispatchErrors": dispatch_errors[:10],
         },
         "notes": {
-            "stalledDefinition": "state!=Done && updatedAt older than threshold",
-            "evidenceDefinition": "Done tasks should include evidence/output path",
+            "stallRule": "Only count as stalled if state!=Done AND not blocked AND updatedAt older than threshold",
+            "blockedRule": "block field non-empty and not in {无,-,none}",
+            "evidenceRule": "Done tasks should include evidence/output path",
         },
     }
 
