@@ -11,7 +11,7 @@ Endpoints:
   GET  /api/model-change-log   → data/model_change_log.json
   GET  /api/last-result        → data/last_model_change_result.json
 """
-import json, pathlib, subprocess, sys, threading, argparse, datetime, logging, re, os
+import json, pathlib, subprocess, sys, threading, argparse, datetime, logging, re, os, shutil
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
