@@ -5,6 +5,7 @@ Port: 7891 (可通过 --port 修改)
 
 Endpoints:
   GET  /                       → dashboard.html
+  GET  /api/version            → git commit + startedAt
   GET  /api/live-status        → data/live_status.json
   GET  /api/agent-config       → data/agent_config.json
   POST /api/set-model          → {agentId, model}
@@ -28,6 +29,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(message
 OCLAW_HOME = pathlib.Path.home() / '.openclaw'
 MAX_REQUEST_BODY = 1 * 1024 * 1024  # 1 MB
 ALLOWED_ORIGIN = None  # Set via --cors; None means restrict to localhost
+
+# 服务器启动时间（用于 /api/version），由 main() 初始化
+SERVER_STARTED_AT = ''
 _DEFAULT_ORIGINS = {
     'http://127.0.0.1:7891', 'http://localhost:7891',
     'http://127.0.0.1:5173', 'http://localhost:5173',  # Vite dev server
@@ -80,6 +84,17 @@ def cors_headers(h):
 
 def now_iso():
     return datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def git_commit_short():
+    """Best-effort 获取当前仓库 git commit（短 sha）。失败则返回空字符串。"""
+    try:
+        # BASE=.../dashboard, repo 根在上一层 (edict/)
+        repo_root = BASE.parent
+        out = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(repo_root))
+        return out.decode().strip()
+    except Exception:
+        return ''
 
 
 def load_tasks():
@@ -2129,6 +2144,17 @@ class Handler(BaseHTTPRequestHandler):
             checks['dataWritable'] = os.access(str(DATA), os.W_OK)
             all_ok = all(checks.values())
             self.send_json({'status': 'ok' if all_ok else 'degraded', 'ts': now_iso(), 'checks': checks})
+        elif p == '/api/version':
+            commit = git_commit_short()
+            payload = {
+                'ok': True,
+                'commit': commit,
+                'startedAt': SERVER_STARTED_AT,
+            }
+            if not commit:
+                # 不影响现有接口；git 信息拿不到时也给出提示
+                payload['warning'] = 'git commit unavailable'
+            self.send_json(payload)
         elif p == '/api/live-status':
             self.send_json(read_json(DATA / 'live_status.json'))
         elif p == '/api/agent-config':
@@ -2470,8 +2496,9 @@ def main():
     parser.add_argument('--cors', default=None, help='Allowed CORS origin (default: reflect request Origin header)')
     args = parser.parse_args()
 
-    global ALLOWED_ORIGIN
+    global ALLOWED_ORIGIN, SERVER_STARTED_AT
     ALLOWED_ORIGIN = args.cors
+    SERVER_STARTED_AT = now_iso()
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     log.info(f'三省六部看板启动 → http://{args.host}:{args.port}')
